@@ -1,6 +1,6 @@
 #include <iostream>
-#include <vector>
 #include <random>
+#include "Array.h"
 
 #include <SFML/Graphics.hpp>
 #include <SFML/System.hpp>
@@ -8,9 +8,10 @@
 #include <SFML/Audio.hpp>
 #include <SFML/Network.hpp>
 
+
 int main()
 {
-	sf::RenderWindow window(sf::VideoMode({ 1920,1080 }), "Snake Game");
+	sf::RenderWindow window(sf::VideoMode({ 1920,1080 }), "Snake Game", sf::State::Windowed);
 
 	window.setFramerateLimit(60);
 
@@ -19,10 +20,16 @@ int main()
 	constexpr int gridWidth = 1920 / cellsize;
 	constexpr int gridHeight = 1080 / cellsize;
 
-	// Snake is represented as grid positions (x/y)
-	std::vector<sf::Vector2i> snake = {
-		{10,10}, {9,10}, {8,10}
-	};
+	// we are allocating 2 columns x and y axis, using this instead of vector for preallocation instead of dynamic resizing
+	Array2D<int> snake(2, 20);
+	snake.Get(0, 0) = 10;
+	snake.Get(1, 0) = 10;
+	snake.Get(0, 1) = 9;
+	snake.Get(1, 1) = 10;
+	snake.Get(0, 2) = 8;
+	snake.Get(1, 2) = 10;
+
+	int snakeLength = 3;
 
 	// Vector storing movement of snake (right)
 	sf::Vector2i direction = { 1,0 };
@@ -39,8 +46,8 @@ int main()
 	// Food Position
 	sf::Vector2i food = { xDist(rng), yDist(rng) };
 
-	// Snake Head (for collision checks)
-	sf::Vector2i newHead = snake.front();
+	// Snake Head need to use our Array 
+	sf::Vector2i newHead = { snake.Get(0,0), snake.Get(1,0) };
 
 	//Game Loop starts 
 	while (window.isOpen())
@@ -73,23 +80,47 @@ int main()
 			movementClock.restart();
 
 			// Add new head in the current direction
-			newHead = snake.front() + direction;
-			snake.insert(snake.begin(), newHead);
+			sf::Vector2i currentHead = { snake.Get(0,0), snake.Get(1,0) };
+			newHead = currentHead + direction;
 
-			// Check if snake eats food
+			// Check if we need to Resize
+			if (snakeLength >= snake.Height())
+			{
+				snake.Resize(2, snake.Height() * 2); // double the buffer
+			}
+
+			// Shift all segments down one row
+			for (int i = snakeLength; i > 0; i--)
+			{
+				snake.Get(0, i) = snake.Get(0, i - 1); // copy x 
+				snake.Get(1, i) = snake.Get(1, i - 1); // copy y
+			}
+
+			// We place the new head at row 0
+			snake.Get(0, 0) = newHead.x;
+			snake.Get(1, 0) = newHead.y;
+			snakeLength++;
 			if (newHead == food)
 			{
-				// Generate new food not on the snake
+				bool foodOnSnake;
 				do {
 					food = { xDist(rng), yDist(rng) };
-				} while (std::find(snake.begin(), snake.end(), food) != snake.end());
+					foodOnSnake = false;
+					for (int i = 0; i < snakeLength; i++)
+					{
+						if (snake.Get(0, i) == food.x && snake.Get(1, i) == food.y)
+						{
+							foodOnSnake = true;
+							break;
+						}
+					}
+				} while (foodOnSnake);
 			}
 			else
 			{
-				// No food eaten, remove tail
-				snake.pop_back();
+				snakeLength--;
 			}
-
+		
 			// Wall Collision
 			if (newHead.x < 0 || newHead.x >= gridWidth ||
 				newHead.y < 0 || newHead.y >= gridHeight)
@@ -97,25 +128,29 @@ int main()
 				window.close(); // Game Over
 			}
 
-			// Self Collision
-			for (size_t i = 1; i < snake.size(); ++i)
+			for (int i = 1; i < snakeLength; ++i)
 			{
-				if (snake[i] == newHead)
+				if (snake.Get(0, i) == newHead.x && snake.Get(1, i) == newHead.y)
 				{
-					window.close(); // Game Over
+					window.close();
 				}
 			}
+
 		}
 
 		// Clear the frame
 		window.clear();
 
 		// Drawing the snake
-		for (const auto& segment : snake)
+		for (int i = 0; i < snakeLength; i++)
 		{
-			sf::RectangleShape rect({ static_cast<float>(cellsize), static_cast<float>(cellsize) });
+			sf::RectangleShape rect({ static_cast<float>(cellsize),static_cast<float>(cellsize) });
 			rect.setFillColor(sf::Color::Green);
-			rect.setPosition(sf::Vector2f(segment.x * cellsize, segment.y * cellsize));
+
+			float xPos = static_cast<float>(snake.Get(0, i) * cellsize);
+			float yPos = static_cast<float>(snake.Get(1, i) * cellsize);
+
+			rect.setPosition(sf::Vector2f(xPos, yPos));
 			window.draw(rect);
 		}
 
